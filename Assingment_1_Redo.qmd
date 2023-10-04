@@ -1,0 +1,481 @@
+---
+title: "Assignment 1"
+author: "500477621"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+format: 
+  html: 
+    self-contained: true
+    code-fold: false
+    code-tools: true
+    code-line-numbers: true
+    df-print: paged
+table-of-contents: true
+bibliography: references.bib
+
+# number-sections: true
+---
+
+# Introduction
+A survey, consisting of questions written by DATA2X02 students was sent out to the DATA2X02 Semester 2 2022 cohort. This report aims to answer some questions about the DATA2X02 cohort based on the survey's results, specifically about the relationships between the amount of employment hours a student has and various other aspects of their life. The questions I will focus on are:
+
+1. Is a DATA2X02 student likely to be working less hours a week if the live at home (with their parents)? 
+2. Is the average employment hours for a student who has had COVID-19 equivalent to that of a student who hasn't?
+3. Does a student's gender have a relationship with their weekly employment hours?
+
+```{r message = FALSE}
+library(tidyverse)
+library(gt)
+responses = readr::read_tsv("data/DATA2x02_survey_2022_Form_responses.tsv")
+
+fig_num = 0
+```
+
+# Data Cleaning
+
+The initial column names in the data are just the questions from the survey, containing spaces, punctuation etc. using the method provided in the Data importing and cleaning guide [@tarr2022]. Below I have included a table that maps the new column names to their old names/corresponding questions from the survey.
+```{r}
+# Column names are long and impractical, save a copy of old ones and change to better ones.
+old_names = colnames(responses)
+
+new_names = c("timestamp","covid_positive","living_arrangements","height","uni_travel_method","uni_travel_listen","spain_budget","feel_overseas","feel_anxious","study_hrs","read_news","study_load","work","lab_zoom","social_media","gender","sleep_time","wake_time","random_number","steak_preference","dominant_hand","normal_advanced","exercise_hrs","employment_hrs","city","weekly_saving","hourly_plan","weeks_behind","assignment_on_time","used_r_before","team_role","data2x02_hrs","social_media_hrs","uni_year","sport","wam","shoe_size","decade_selection")
+
+# overwrite the old names with the new names:
+colnames(responses) = new_names
+
+# combine old and new into a data frame:
+name_combo = bind_cols(New = new_names, Old = old_names)
+```
+
+<div id = "table_big" style = "height: 400px; overflow: scroll;">
+```{r}
+name_combo %>% gt::gt( id = 'one') %>%
+  opt_css(
+    css = "#one .gt_table {position:relative; height: 10px; overflow:scroll;} "
+  )
+```
+</div>
+<br>
+
+An initial look at the dataset...
+```{r}
+responses
+```
+
+Looking at the dataset, there were 207 responses to the survey. Notably, there are `r 780+70` students in the course that the survey was sent to, so there is only a `r round((207/(780+80))*100,2)`% response rate. This is extremely low, and it would be fair to suggest that these 207 respondents do not reflect a random sample of DATA20x2 students. 
+
+In order to fill out the survey, you had to find the link on ed, and then go to the effort of actually filling it out. This means that the students who did fill it out are probably those who are more proactive, and more organised with keeping up with the goings-on in the subject.
+
+This becomes clearer when we look at the proportion of students from DATA2002 and DATA2902 that actually completed the survey (**Figure 1**). More that half (`r round(40/70*100, 2)`%) of DATA2902 students completed the survey, where only `r round(165/780*100, 2)`% of DATA2002 students completed the survey. In general, studetns who are going to the effort of taking on advanced courses tend to be very proactive studetns, hence the higher response rate. This does pose challenges in terms of drawing conclusions about the DATA2X02 populations more generally, as the sample is not random.
+
+```{r}
+participant_counts <- table(responses$normal_advanced)
+
+df <- data.frame(
+  subject = c('DATA2002', 'DATA2002', 'DATA2902', 'DATA2902'),
+  completed = c('Did not complete the survey', 'Did complete the survey', 'Did not complete the survey', 'Did complete the survey'),
+  count = c(
+    780-participant_counts[[1]],
+    participant_counts[[1]],
+    70-participant_counts[[2]],
+    participant_counts[[2]])
+)
+
+fig_num = fig_num +1
+
+df |>
+  ggplot() +
+  aes(x = subject, fill = completed, y = count) +
+  geom_col(position = 'fill') +
+  labs(x = 'Stream of DATA2X02 taken', y = 'Proportion', fill = "") +
+  ggtitle(paste("Figure ",fig_num,": Proportion of DATA2002 and DATA2X02 \nstudents to complete the survey", sep = ""))
+```
+
+With this in mind, I would suggest that there would definitely be some **selection bias** happening. If the survey participants reflects a more proactive portion of the cohort, some questions relating to organisation and studying would be subjected to this bias and wouldn't represent a random sample fo the DATA2X02 cohort. Namely:
+
+- `study_hrs` - *How many hours a week do you spend studying?* A more proactive student is likely to be one that spends more time on uni each week.
+- `lab_zoom` - *When you're in a Zoom lab, how often do you turn your camera on?* The kind of students that are choosing to participate in a survey are probably more likely to participate in class, perhaps by turning their cameras on
+- `normal_advanced` - *Which unit are you enrolled in?* As we have seen already, the survey results reflect a much higher proportion of Advanced students then there are in reality.
+- `hourly_plan` - *In an average week during the semester, do you make an hourly plan of your day?* A more organised student is more likely to make a study plan, and more likely to complete the survey.
+- `weeks_behind` - *In an average semester, how many weeks (on average, between all subjects) are you behind on lectures, labs and tutorials?* Similarly a more organised student is more likely to be less behind on study, and more likely to complete the survey.
+- `assignment_on_time` - *Do you submit assignments on time?* Also along the same vein, a more proactive student will most likely hand in assignments on time
+- `team_role` - *What kind of role (active or passive) do you think you are when working as part of a team?*
+- `wam` - *What is your WAM?* A more conscientious student is likely to ave a higher WAM.
+
+As well as the discussed selection bias, There is also some possibility of **response bias**. Respondents may not have answered the given truthfully whether is be to make themselves look like a better person student, or just to mess around and have some fun in their responses. The changing of answers to reflect better on the respondent would be largely combatted by the anonymous contest of the survey, however this same anonymity is probably the cause of joke answers, a prime example of which was pointed out in the Data Cleaning Guide:
+```{r}
+filter(responses, gender == 'attack helicopter')
+
+responses <- filter(responses, gender != 'attack helicopter')
+```
+I have chosen to remove this row from the dataset that listed their gender as 'attack helicopter', as well as recording a height of 254 cm. Between the transphobic joke and unreasonable responses to just about every question, I decided this row wasn't really usable, and removed it.
+
+Throughout my data cleaning process, I will look for any other unreasonable values that may point to illegitimate responses.
+
+In the survey, no questions were marked as required, so respondents could choose to leave as many as they wanted empty. Using a visualisation provided in the cleaning guide [@tarr2022], I loked at how many values were missing from each column.
+```{r warning = FALSE}
+visdat::vis_miss(responses, sort_miss = TRUE, cluster = FALSE)
+```
+
+Overall, 3.1% of answers were missing, which were most concentrated in specific questions:
+
+- `wam` - *What is your WAM?* had a 20.59% non response rate. This is not surprising, as many students would be uncomfortable answering this question
+- `weekly_saving` - *On average, how much are you able to save per week (in AUD)?* had 12.75% missing. Once again, this is a more sensitive question, but also is a bit harder to work out and therefore less likely to be answered
+- `spain_budget` - *If you were to spend two weeks travelling around Spain, how much would you budget towards spending each day (all inclusive: accommodation/activities/food/drink/entertainment)?* had 12.25% missing. I personally did not answer this question when I completed the survey, as I felt it was too much work/thinking to give a useful answer.
+- `city` - *What city and suburb do you currently reside in?* had 7.35% missing. This is likely because people found this question too personal
+
+All other questions had $< 7\%$ missing. I decided to discount the 4 attributes named above, as the missing values, and the reluctance that his lack of responses entailed suggested the data would be subject to Response Bias e.g. people may lie about their WAM or weekly savings over giving a true response. Having excluded these 4 columns, I focused on the other columns to select my research questions.
+
+## Employment Hours
+The question in the survey relating to this datapoint was:
+![How many hours a week (on average) do you work in paid employment?](images/employment_q.png)
+
+With a short answer textbox. The question was quite specific, and seemed to get responses that made sense to the question i.e. all responses were numeric
+```{r}
+responses$employment_hrs
+```
+
+There was another question on the survey that related closely with this one, regarding the nature of respondents employment.
+![Do you work?](images/job_q.png)
+It should follow that an answer of 0 for employment hours should correspond to an answer of 'I don't currently work', and vice versa, however there were instance where this was not the case:
+```{r}
+no_work = filter(responses, (work == "I don't currently work"& employment_hrs > 0))
+no_work[, c('employment_hrs', 'work')]
+
+some_work = filter(responses, !(work == "I don't currently work")& employment_hrs == 0)
+some_work[, c('employment_hrs', 'work')]
+```
+Both of these situations present answers that do not make sense. I want to exclude them from my analysis of `employment_hrs`, so I will sent their `employment_hrs` to NA.
+```{r}
+indicies = which(
+                (responses$work == "I don't currently work" & responses$employment_hrs > 0)
+                |(responses$work != "I don't currently work" & responses$employment_hrs == 0)
+                ,)
+
+responses$employment_hrs[indicies] <- NA
+```
+```{r}
+responses |>
+  ggplot() +
+  aes(x = employment_hrs) +
+  geom_histogram()
+```
+Looking at the histogram, we can see that there is one outlier. This participant said that they worked 55 hours a week, however they also recorded that they studied full time and worked part time. For them the be working 55 hours a week and studying 30 hours a week, they would need to be working more than 7 hours every day of the week and studying more than 4 hours everyday. Which given they also said that they would sleep for 8.25 hours a night and exercise for 6 hours every week, would only leave them on average `r ((24*7) - 55 - 30 - (8.25*7) - 6)/7`  hours every day to eat, socialise, or do any other activities. This seems unlikely, so I am going to discount this row from my anaylsis.
+
+```{r}
+filter(responses, employment_hrs > 45)[, c('employment_hrs', 'sleep_time', 'wake_time','study_hrs', 'exercise_hrs')]
+
+responses <- filter(responses, employment_hrs != 55)
+```
+
+```{r}
+responses |>
+  ggplot() +
+  aes(x = employment_hrs) +
+  geom_histogram() +
+  ggtitle("Employment Hours histogram with the outlier removed")
+```
+
+
+### Normality
+```{r}
+responses |>
+  ggplot() +
+  aes(sample = employment_hrs)+
+  geom_qq_line() + geom_qq()
+```
+Looking at the QQplot for the column, the data is clearly not normal, mostly due to the large amount of 0s. This non normality will need to be kept in mind when choosing which tests can be done using this variable.
+
+### Discretising
+For some of the analysis I plan to do with `employment_hrs`, I will need to discretise it into a categorical form. I have decided to do this by splitting the data into groups that correspond to a 5 hour range of working hours. E.g. If `employment_hrs` was 22, `employment_hrs_dis` would be `h20-24`. This grouping may need to change when I complete my related tests to ensure that all expected values $\geq 5$
+```{r}
+employment_hrs_dis =  paste('h', (responses$employment_hrs %/% 5)*5, '_', ((responses$employment_hrs %/% 5)*5)+4, sep = "")
+
+responses<-mutate(responses, employment_hrs_dis = employment_hrs_dis)
+
+responses$employment_hrs_dis = factor(responses$employment_hrs_dis, 
+                                      levels = c('h0_4',
+                                                 'h5_9',
+                                                 'h10_14',
+                                                 'h15_19',
+                                                 'h20_24',
+                                                 'h25_29',
+                                                 'h30_34',
+                                                 'h35_39',
+                                                 'h40_44',
+                                                 'h45_49'))
+
+responses |>
+  ggplot() +
+  aes(x = employment_hrs_dis) +
+  geom_bar()
+```
+
+
+## Gender
+The gender variables was collected with the question "What is your gender?", with a short answer text box and no restraints. 
+![What is your gender?](images/gender_q.png)
+To minimize the amount of cleaning, it may have been better to use a radio button style question, with options Female, Male, Non-binary, prefer not to say and other (with a text box to allow those who selected 'other' to elaborate), as Recommended by the [Australian Bureau of Statistics](https://www.abs.gov.au/statistics/standards/standard-sex-gender-variations-sex-characteristics-and-sexual-orientation-variables/latest-release).
+However, using the [gendercoder](https://github.com/ropensci/gendercoder) package as outlined in the data cleaning guide [@tarr2022] [@gendercoder], the responses were able to be categorised (eg. female, f, woman, or misspellings of these became 'woman') into a new column, `gender_clean`. 
+```{r}
+responses = responses %>% mutate(
+  gender_clean = gendercoder::recode_gender(gender)
+)
+responses %>% janitor::tabyl(
+  gender, gender_clean
+) %>% gt::gt() %>% 
+  gt::tab_spanner(label = "Recoded outcomes", columns = 2:5) %>% 
+  gt::cols_label(gender = "Original outcomes")
+```
+
+```{r}
+responses |>
+  ggplot() +
+  aes(x = gender_clean) +
+  geom_bar()
+```
+
+Looking at the barplot above, we can see that only 3 (2 non binary and one 'other') respondents recorded a gender that fell outside of Male and Female. Whilst it is important not to erase gender diverse people, a sample size of 3 is unfortunately too small to draw any meaningful conclusions. For this reason, I will only be discussing results for the genders of 'woman' and 'man'
+
+## Living arrangements
+This column comes from a multiple choice question in the survey:
+![What are your current living arrangements?](images/living_q.png)
+The multiple choice format of this question means that there is limited cleaning to be done.
+```{r}
+living_arrangements_tab = as.data.frame(table(responses$living_arrangements))
+colnames(living_arrangements_tab) = c("living_arrangements", "Freq")
+
+living_arrangements_tab <- living_arrangements_tab |>
+  mutate(prop = round(Freq / sum(Freq)*100,2))
+
+living_arrangements_tab |>
+  ggplot() +
+  aes(x = living_arrangements, y = prop) +
+  geom_bar(stat = 'identity') +
+  geom_text(aes(label = prop), vjust = 2)
+```
+In my investigation, I want to spceifically compare those that live at home (being the "With parents and/or siblings") with those that are living independently (all other options). I will create a new colum that is a boolean of whether or not the row lives at home.
+```{r}
+responses = responses |>
+  mutate(arrangements_simplified = ifelse(living_arrangements == "With parent(s) and/or sibling(s)", "At home", "Independently"))
+```
+
+
+## COVID
+Finally, we have the question "Have you ever tested positive to COVID-19?", which was a multiple choice question with an 'other' option
+![Have you ever tested positive to COVID-19?](images/covid_q.png)
+```{r}
+table(responses$covid_positive)
+```
+Looking at the table, it appears that no one took the 'other' option or chose to elaborate. This means there is no cleaning to be done, as the data is already cleanly split into 2 distinct groups (excluding a small amount of NA responses).
+
+```{r}
+responses |>
+  ggplot() +
+  aes(x = covid_positive) +
+  geom_bar()
+```
+it would appear that amount of respondents who haven't had COVID slightly outnumbers the amount who have, although the groups are relatively similar in size.
+
+# Question 1: Living Arrangements and Employment Hours
+Is a DATA2X02 student likely to be working less hours a week if they live at home (with their parents)? 
+i.e. Is employment hours **independent** between those who do and don't live with their parents?
+
+I will be investigating this question using a $\chi^2$ test for independence between the discretised employment hours and living arrangements, specifically a binary of living at home or living out of home.
+My intuition would be that those that live out of home are more likely to be paying rent, and as such will work more hours to cover this cost.
+
+```{r}
+t = table(responses$arrangements_simplified, responses$employment_hrs_dis)
+
+x = as.data.frame(t)
+# ind_total = sum(filter(x, Var1 == "Independently")$Freq)
+# home_total = sum(filter(x, Var1 == "At home")$Freq)
+# 
+# x = x |>
+#   mutate(prop_split = ifelse(Var1 == "Independently", Freq/ind_total*100, Freq/home_total*100))
+# 
+
+
+x |>
+  ggplot() +
+  aes(x = Var2, y = Freq, fill = Var1) +
+  geom_bar(stat = 'identity', position = 'dodge')
+```
+From the barplot, to my surprise it seems that far more respondents that live independently work 0-4 hours a week, which seems to contradict my intuition.
+
+## Chi Squared Test for Independence
+### Hypotheses
+- $H_0$: Whether someone lives with their parents is independent from their employment hours weekly.
+- $H_1$: The two factors are not independent.
+
+### Assumptions
+- All observations are independent of each other - TRUE, the nature of the survey format that was sent out to students means that each response was independent of other's reposnses.
+- All expected values $\geq 5$ - FALSE, checking the expected values, categories for 25-29 hours and upwards all had expected values less than 4. 
+```{r warning = FALSE}
+chisq <- chisq.test(t, correct = FALSE)
+
+z = as.data.frame(chisq$expected)
+z
+```
+In order to meet this assumption, I will combine the last few groups into a larger '25+ hours' category.
+```{r}
+employment_hrs_dis_new =  ifelse(responses$employment_hrs < 25,paste('h', (responses$employment_hrs %/% 5)*5, '_', ((responses$employment_hrs %/% 5)*5)+4, sep = ""), 'h25+')
+
+responses<-mutate(responses, employment_hrs_dis_new = employment_hrs_dis_new)
+t = table(responses$arrangements_simplified, responses$employment_hrs_dis_new)
+x = as.data.frame(t)
+
+new_ch <- chisq.test(t, correct = FALSE)
+as.data.frame(new_ch$expected)
+```
+With these new groupings, the expected values are all large enough.
+
+### Performing the test
+```{r}
+new_ch
+```
+
+### Decision
+With a p-value of $0.0001874 < \alpha = 0.05$, the $\chi^2$ test suggests that we should reject the null hypothesis that living at home and employment hours are independent.
+
+# Question 2: COVID and employment hours
+Is the average employment hours for a student who has had covid similar to that of a student who hasn't? i.e. do the two groups have equal means
+
+I knew I wanted to test the means of the two groups, but I needed to find an appropriate test.
+```{r}
+covid <- responses |>
+  filter(!is.na(covid_positive))
+
+covid |>
+  ggplot() +
+  aes(x = employment_hrs) +
+  geom_histogram() +
+  facet_wrap(vars(covid_positive), scales = 'free')
+```
+Looking at the initial visualisation, it seems that a much larger amount of responsents who havent had covid work 0 hours a week, where those that have had covid are much more varied in their employment hours. This is matched when looking at the means:
+```{r}
+sum = covid %>% 
+  group_by(covid_positive) %>% 
+  summarise(Mean = mean(employment_hrs),
+            SD = sd(employment_hrs), 
+            n = n())
+
+knitr::kable(sum, 
+             format = "html", 
+             digits = 1)
+```
+
+I wanted to check the normality of each of the samples, as well as their distributions in order to get a sense of what tests might be appropriate. First, I used a qqplot to check normality, which indcated the samples were not normal. This ruled out a t test.
+
+```{r}
+covid |>
+  ggplot() +
+  aes(sample = employment_hrs)+
+  geom_qq_line() + geom_qq() +
+  facet_wrap(vars(covid_positive))
+```
+
+I also checked if the two samples had symmetric, or matching distributions, and discovered that neither samples were symmetric, and they did not share the same distribution.
+
+```{r}
+covid |> 
+  ggplot() +
+  aes(x = employment_hrs, fill = covid_positive) +
+  geom_density(alpha = 0.5)
+```
+As the data is not normally or symmetrically distributed, and the two samples do not follow the same distribution, the t test and the wilcoxon sum rank and signed rank tests are all inappropriate. This lead me to perform a permutation test, as it does not have any underlying distribution requirements.
+
+## Permutation Test
+### Hypothesis
+- $H_0$: The average employment hours for a DATA2X02 student does not differ depending on whether they have had covid
+- $H_1$: The average employment hours do differ
+
+### Assumptions
+- The observations are exchangeable under $H_0$ - TRUE, any of the values (of employment hours) in the dataset could reaosnably come from the Yes or No testing potitive to COVID group. This is true because the two sets have similar ranges and variances, and we could reasonably assume that, given a datapoint, it could belong to either group.
+
+### Performing the test
+```{r}
+covid_work = responses[,c('covid_positive', 'employment_hrs')]
+covid_work
+
+tt = t.test(employment_hrs ~ covid_positive, data=covid_work, var.equal = FALSE)
+tt$statistic
+
+B = 10000
+permuted_data = covid_work # making a copy of the data
+t_null = vector("numeric", B)
+
+set.seed(100)
+for (i in 1:B) {
+  permuted_data$covid_positive = sample(covid_work$covid_positive, replace = FALSE)
+  t_null[i] = t.test(employment_hrs ~ covid_positive, data=permuted_data)$statistic
+}
+
+t_null %>% data.frame() %>% 
+  ggplot() + 
+  aes(x = abs(t_null)) + 
+  geom_histogram(binwidth = 0.1) + 
+  labs(
+    x = "Test statistics from permuted samples"
+  ) +
+  geom_vline(
+    xintercept = abs(tt$statistic), col = 'red', lwd = 2
+  )
+
+mean(abs(t_null) >= abs(tt$statistic))
+
+```
+Visually, we can see that our permutations produced a very small amount of test statistics more extreme than out calculated test statistic, which is consistent with out permutation test p-value of $1e-04 = 0.00001 < \alpha = 0.05$. 
+
+### Decision 
+This permutation test p value is extremely small! As it is much smallest that $\alpha = 0.05$, we reject the null hypothesis that the mean employment hours for students who have and haven't had COVID are the same.
+
+I would propose that this is because students who work would generally have less choice in who they interact with, and therefore are not able to be as cautious with avoiding COVID. E.g. if you work retail or hospitality, you have to spend a significant amount of time interacting with lots of different people, and thus you are more likely to have had COVID.
+
+# Question 3: Gender and Employment Hours
+Does a student's gender have a relationship with their employment hours? i.e. Is a student's gender **independent** of their employment hours?
+```{r}
+male_female = filter(responses, gender_clean == 'woman' | gender_clean == 'man')
+
+male_female |>
+  ggplot() +
+  aes(x = employment_hrs_dis) +
+  geom_bar() +
+  facet_wrap(vars(gender_clean), scales = 'free') +
+  theme (axis.text.x = element_text (angle=45, vjust=1, hjust=1))
+
+gender_work = table(male_female$gender_clean, male_female$employment_hrs_dis)
+gender_work
+```
+Looking at the barplots, the distributions look pretty similar, the barplot would suggest that perhaps there is no realtionship between gender and employment hours.
+
+## Monte Carlo Simulation
+### Hypotheses
+- $H_0$: gender and employment hours are independent
+- $H_1$: gender and employment hours are not independent
+
+### Assumptions
+- In a Monte Carlo Simulation, no assumptions are made about the distribution of the data
+
+### Performing the test
+```{r}
+set.seed(100)
+chisq.test(gender_work, simulate.p.value = TRUE, B = 10000)
+```
+
+### Decision
+- The p value found using the Monte Carlo simulation is very high, 0.79. This suggests that our observations are consistent with the null hypothesis, that employment hours and gender are independent.
+
+
+# Conclusion
+Through the course of this report, I have used 3 tests to answer 3 questions. Whilst there is definitely some selection bias in the data, variables e.g. hours of study a week that would be highly impacted by this bias were not considered. Instead, factors that wouldn't be impacted by a more proactive (than average) sample were chosen for analysis were chosen, specifically employment hours in terms of living arrangements, having had COVID and Gender. 
+
+From the tests, it was established that:
+
+- The data suggests that whether a student lives at home (with parents) or independently and their employment hours are non independent (rejecting $H_0$ in our $\chi ^2$ test of independence)
+- There is evidence to support that the average employment hours for a student who has and hasn't had covid are different (rejecting $H_0$ in our permutation test)
+- The data provides evidence that gender does not effect employment hours (Not rejecting $H_0$ in a Monte Carlo test for independence)
+
+---
+nocite: |
+  @*
+---
